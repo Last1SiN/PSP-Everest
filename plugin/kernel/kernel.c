@@ -210,22 +210,6 @@ u8 *pspGetMACAddress(u8 *buf) {
     return buf;
 }
 
-// Read-only battery EEPROM access via Syscon.
-int pspReadBatteryWord(u8 addr, u16 *value) {
-    if (value == NULL || addr > 0x7F)
-        return (int)0x80000102;
-    int oldK1 = pspSdkSetK1(0);
-    u8 param[0x60] = {0};
-    param[0x0C] = 0x74;
-    param[0x0D] = 3;
-    param[0x0E] = addr;
-    int result = (int)sceSysconCmdExec(param, 0);
-    if (result >= 0)
-        *value = ((u16)param[0x21] << 8) | param[0x20];
-    pspSdkSetK1(oldK1);
-    return result < 0 ? result : 0;
-}
-
 // Battery serial over the regular 0x6C Syscon query, as used by
 // sceSysconBatteryGetSerial(). This is not an EEPROM access.
 int pspReadBatterySerial(u32 *serial) {

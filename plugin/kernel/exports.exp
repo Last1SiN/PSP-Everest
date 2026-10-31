@@ -21,6 +21,7 @@ PSP_BEGIN_EXPORTS
         PSP_EXPORT_FUNC_HASH(pspNandGetTotalBlocks)
         PSP_EXPORT_FUNC_HASH(pspGetMACAddress)
         PSP_EXPORT_FUNC_HASH(pspReadBatteryWord)
+        PSP_EXPORT_FUNC_HASH(pspReadBatterySerial)
         PSP_EXPORT_FUNC_HASH(pspChkregGetPsCode)
         PSP_EXPORT_FUNC_HASH(pspChkregGetPsFlags)
         PSP_EXPORT_FUNC_HASH(pspSysconBatteryGetElec)

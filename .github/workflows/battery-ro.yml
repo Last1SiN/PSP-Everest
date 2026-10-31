@@ -1,0 +1,34 @@
+name: Rev9 Battery RO build
+
+on:
+  push:
+    branches:
+      - feature/battery-readonly-rev9
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/pspdev/pspdev:v20261001
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no battery EEPROM write functions
+        shell: bash
+        run: |
+          if grep -R -nE 'pspWriteSerial|pspWriteBat' app/source plugin/kernel app/include; then exit 1; fi
+          if grep -n 'param\[0x0C\] = 0x73' plugin/kernel/kernel.c; then exit 1; fi
+      - name: Compile EBOOT
+        shell: bash
+        run: |
+          make
+          test -s app/EBOOT.PBP
+      - name: Publish test binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: PSP-Everest-Rev9-Battery-RO-EBOOT
+          path: app/EBOOT.PBP
+          if-no-files-found: error

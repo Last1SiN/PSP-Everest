@@ -36,7 +36,6 @@ int pspNandGetPageSize(void);
 int pspNandGetTotalBlocks(void);
 int pspNandGetPagesPerBlock(void);
 u8 *pspGetMACAddress(u8 *buf);
-int pspReadBatteryWord(u8 addr, u16 *value);
 int pspReadBatterySerial(u32 *serial);
 int pspChkregGetPsCode(ScePsCode *psCode);
 int pspChkregGetPsFlags(u8 *psFlags, s32 index);

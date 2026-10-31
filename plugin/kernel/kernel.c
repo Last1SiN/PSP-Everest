@@ -18,14 +18,14 @@ PSP_MAIN_THREAD_ATTR(0);
 
 s32 sceSysconGetBaryonVersion(s32 *baryon);
 s32 sceSysconGetPommelVersion(s32 *pommel);
-s32 sceSyscon_driver_FB148FB6(s32 *polestar); // sceSysconGetPolestarVersion
-u64 sceSysreg_driver_4F46EEDE(void);          // sceSysregGetFuseId
-u32 sceSysreg_driver_8F4F4E96(void);          // sceSysregGetFuseConfig
+s32 sceSysconGetPolestarVersion(s32 *polestar); // sceSysconGetPolestarVersion
+u64 sceSysregGetFuseId(void);          // sceSysregGetFuseId
+u32 sceSysregGetFuseConfig(void);          // sceSysregGetFuseConfig
 int sceSysregKirkBusClockEnable(void);
 int sceSysregAtaBusClockEnable(void);
 u32 sceSysconCmdExec(void *param, int unk);
 int sceSysconBatteryGetElec(int *elec);
-int sceSyscon_driver_4C539345(int *elec);     // sceSysconBatteryGetTotalElec
+int sceSysconBatteryGetTotalElec(int *elec);     // sceSysconBatteryGetTotalElec
 static int (*sceUtilsBufferCopyWithRange)(u8 *outbuff, int outsize, u8 *inbuff, int insize, int cmd);
 s32 sceChkregGetPsCode(ScePsCode *pPsCode);
 s32 sceChkregGetPsFlags(u8 *pPsFlags, s32 index);
@@ -68,21 +68,21 @@ u32 pspGetTachyonVersion(void) {
 
 u32 pspGetPolestarVersion(s32 *polestar) {
     int k1 = pspSdkSetK1(0);
-    u32 err = sceSyscon_driver_FB148FB6(polestar);
+    u32 err = sceSysconGetPolestarVersion(polestar);
     pspSdkSetK1(k1);
     return err;
 }
 
 u64 pspGetFuseId(void) {
     int k1 = pspSdkSetK1(0);
-    u64 err = sceSysreg_driver_4F46EEDE();
+    u64 err = sceSysregGetFuseId();
     pspSdkSetK1(k1);
     return err;
 }
 
 u32 pspGetFuseConfig(void) {
     int k1 = pspSdkSetK1(0);
-    u32 err = sceSysreg_driver_8F4F4E96();
+    u32 err = sceSysregGetFuseConfig();
     pspSdkSetK1(k1);
     return err;
 }
@@ -210,90 +210,33 @@ u8 *pspGetMACAddress(u8 *buf) {
     return buf;
 }
 
-static u32 pspWriteBat(u8 addr, u16 data) {
-    int k1 = pspSdkSetK1(0);
-    
-    int res = 0;
-    u8 param[0x60];
-    
-    if (addr > 0x7F)
-        return(0x80000102);
-        
-    param[0x0C] = 0x73;
-    param[0x0D] = 5;
-    param[0x0E] = addr;
-    param[0x0F] = data;
-    param[0x10] = data >> 8;
-    
-    res = sceSysconCmdExec(param, 0);
-    if (res < 0)
-        return res;
-        
-    pspSdkSetK1(k1);
-    return 0;
-}
+// Battery serial over the regular 0x6C Syscon query, as used by
+// sceSysconBatteryGetSerial(). This is not an EEPROM access.
+int pspReadBatterySerial(u32 *serial) {
+    if (serial == NULL)
+        return (int)0x80000102;
 
-int pspWriteSerial(u16 *serial) {
-    int err = 0;
-    
-    err = pspWriteBat(0x07, serial[0]);
-    if (!err)
-        err = pspWriteBat(0x09, serial[1]);
-        
-    return err;
-}
+    int oldK1 = pspSdkSetK1(0);
+    u8 packet[0x60] = {0};
+    packet[0x0C] = 0x6C; // PSP_SYSCON_CMD_BATTERY_GET_SERIAL
+    packet[0x0D] = 2;    // command and length, no request data
 
-static u32 pspReadEEPROM(u8 addr) {
-    u8 param[0x60];
-    
-    if (addr > 0x7F)
-        return 0x80000102;
-        
-    param[0x0C] = 0x74;
-    param[0x0D] = 3;
-    param[0x0E] = addr;
-    
-    int res = sceSysconCmdExec(param, 0);
-    if (res < 0)
-        return res;
-        
-    return (param[0x21] << 8) | param[0x20];
-}
-
-static int pspErrCheck(u32 chdata) {
-    if ((chdata & 0x80250000) == 0x80250000) {
-        return -1;
-    }
-    else if (chdata & 0xFFFF0000) {
-        return(chdata & 0xFFFF0000) >> 16;
+    int result = (int)sceSysconCmdExec(packet, 0);
+    if (result >= 0) {
+        // SceSysconPacket.rx begins at 0x1C; rx[1] is the length,
+        // rx[3..6] is the four-byte serial in little-endian order.
+        if (packet[0x1D] == 7) {
+            *serial = (u32)packet[0x1F] |
+                      ((u32)packet[0x20] << 8) |
+                      ((u32)packet[0x21] << 16) |
+                      ((u32)packet[0x22] << 24);
+        } else {
+            result = (int)0x80250001; // unexpected response length
+        }
     }
 
-    return 0;
-}
-
-int pspReadSerial(u16 *pdata) {
-    int err = 0;
-    u32 data;
-    
-    u32 k1 = pspSdkSetK1(0);
-    
-    data = pspReadEEPROM(0x07);	
-    err = pspErrCheck(data);
-    
-    if (err >= 0) {
-        pdata[0] = (data & 0xFFFF);
-        data = pspReadEEPROM(0x09);
-        err = pspErrCheck(data);
-        if (err >= 0)
-            pdata[1] = (data & 0xFFFF);
-        else
-            err = data;
-    }
-    else
-        err = data;
-        
-    pspSdkSetK1(k1);
-    return err;
+    pspSdkSetK1(oldK1);
+    return result < 0 ? result : 0;
 }
 
 int pspChkregGetPsCode(ScePsCode *psCode) {
@@ -319,7 +262,7 @@ int pspSysconBatteryGetElec(int *elec) {
 
 int pspSysconBatteryGetTotalElec(int *elec) {
     int k1 = pspSdkSetK1(0);
-    int ret = sceSyscon_driver_4C539345(elec);
+    int ret = sceSysconBatteryGetTotalElec(elec);
     pspSdkSetK1(k1);
     return ret;
 }

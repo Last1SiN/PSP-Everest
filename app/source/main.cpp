@@ -20,7 +20,7 @@
 #include "utils.h"
 #include "vlf.h"
 
-PSP_MODULE_INFO("PSP EVEREST 2 Rev 9", PSP_MODULE_USER, 2, 7);
+PSP_MODULE_INFO("PSP EVEREST 2 Rev 9 RO", PSP_MODULE_USER, 2, 9);
 PSP_MAIN_THREAD_ATTR(0);
 
 typedef struct {
@@ -52,7 +52,6 @@ namespace Menus {
 
     static u8 menu = 0;
     static bool battery_break = false;
-    static u16 bserialdata[2], serialdata[2];
     static VlfText text_hardware[NUM_DEL_ITEMS_HARDWARE], text_battery[NUM_DEL_ITEMS_BATTERY],
         text_system[NUM_DEL_ITEMS_SYSTEM], text_consoleId[NUM_DEL_ITEMS_CONSOLEID];
 
@@ -129,7 +128,9 @@ namespace Menus {
     }
     
     void BatteryInfo(void) {
-        bool swbt = true, checkbt = false;
+        bool need_serial_read = true;
+        int serial_status = -1;
+        u32 battery_serial = 0;
         int elec = 0, total_elec = 0;
         
         if (button_assign) {
@@ -162,36 +163,21 @@ namespace Menus {
                 int battery_percent = scePowerGetBatteryLifePercent();
                 int battery_life_time = scePowerGetBatteryLifeTime();
                 
-                if (update != 0 && scePowerIsBatteryExist() && swbt && (psp_model == 0 || (menu_item.tachyon <= 0x00500000 && menu_item.baryon == 0x0022B200))) {
-                    pspReadSerial(bserialdata);
-                    
-                    u16 wrbuffer[0x80];
-                    wrbuffer[0] = 0x5053;
-                    
-                    if (bserialdata[0] != 0x5058) {
-                        wrbuffer[1] = 0x5058;
-                    }
-                    else {
-                        wrbuffer[1] = 0x4456;
-                    }
-                    
-                    pspWriteSerial(wrbuffer);
-                    
-                    checkbt = false;
-                    pspReadSerial(serialdata);
-                    
-                    if (serialdata[0] == wrbuffer[0] && serialdata[1] == wrbuffer[1]) {
-                        checkbt = true;
-                        pspWriteSerial(bserialdata);
-                    }
-                    
-                    swbt = false;
+                // Query the battery's 32-bit serial via read-only Syscon
+                // command 0x6C. Do not access battery EEPROM directly.
+                if (update != 0 && scePowerIsBatteryExist() && need_serial_read) {
+                    battery_serial = 0;
+                    serial_status = pspReadBatterySerial(&battery_serial);
+                    need_serial_read = false;
                 }
-                
-                if (!swbt && !scePowerIsBatteryExist()) {
-                    swbt = true;
+
+                // Force a fresh query if the battery is removed and reinserted.
+                if (!need_serial_read && !scePowerIsBatteryExist()) {
+                    need_serial_read = true;
+                    battery_serial = 0;
+                    serial_status = -1;
                 }
-                
+
                 text_battery[0] = GUI::Printf(15, 70, trans->battery.ex_power, psp_model == 4 ? "-" : scePowerIsPowerOnline() ? trans->yes : trans->no);
                 text_battery[1] = GUI::Printf(15, 90, trans->battery.batt_stat,  scePowerIsBatteryExist() ? trans->battery.batt_stat_present : trans->battery.batt_stat_absent);
                 text_battery[2] = GUI::Printf(15, 110, trans->battery.charging, scePowerIsBatteryCharging() ? scePowerIsBatteryExist() ? battery_percent == 100 ? trans->battery.charging_cpl : trans->yes : trans->no : trans->no);
@@ -204,12 +190,30 @@ namespace Menus {
                 text_battery[8] = GUI::Printf(240, 90, scePowerGetBatteryTemp() <= 0 ? trans->battery.no_temperature : trans->battery.temperature, scePowerGetBatteryTemp());
                 text_battery[9] = GUI::Printf(240, 110, scePowerGetBatteryRemainCapacity() <= 0 ? trans->battery.no_remain_capacity : trans->battery.remain_capacity, scePowerGetBatteryRemainCapacity());
                 text_battery[10] = GUI::Printf(240, 130, scePowerGetBatteryFullCapacity() <= 0 ? trans->battery.no_total_capacity : trans->battery.total_capacity, scePowerGetBatteryFullCapacity());
-                text_battery[11] = GUI::Printf(240, 150, scePowerIsBatteryExist() && (psp_model == 0 || (menu_item.tachyon == 0x00500000 && menu_item.baryon == 0x0022B200)) && checkbt ? trans->battery.serial : trans->battery.no_serial, bserialdata[0], bserialdata[1]);	
-                text_battery[12] = GUI::Printf(240, 170, trans->battery.mode, 
-                    checkbt && scePowerIsBatteryExist() && bserialdata[0] == 0xFFFF && bserialdata[1] == 0xFFFF && (psp_model == 0 || (menu_item.tachyon <= 0x00500000 && menu_item.baryon == 0x0022B200)) ? trans->battery.mode_service :
-                    checkbt && scePowerIsBatteryExist() && bserialdata[0] == 0x0000 && bserialdata[1] == 0x0000 && (psp_model == 0 || (menu_item.tachyon <= 0x00500000 && menu_item.baryon == 0x0022B200)) ? trans->battery.mode_autoboot :
-                    checkbt && scePowerIsBatteryExist() && (psp_model == 0 || (menu_item.tachyon <= 0x00500000 && menu_item.baryon == 0x0022B200)) ? trans->battery.mode_default : "-");
-                text_battery[13] = GUI::Printf(240, 190, pspSysconBatteryGetTotalElec(&total_elec) < 0? "Total Elec Charge: -" : "Total Elec Charge: %d mA", total_elec);
+                const bool have_serial = scePowerIsBatteryExist() && serial_status == 0;
+                text_battery[11] = GUI::Printf(240, 150,
+                    have_serial ? trans->battery.serial : trans->battery.no_serial,
+                    (u16)(battery_serial >> 16), (u16)battery_serial);
+
+                const bool pandora_capable = psp_model == 0 ||
+                    (menu_item.tachyon <= 0x00500000 && menu_item.baryon == 0x0022B200);
+                if (pandora_capable) {
+                    text_battery[12] = GUI::Printf(240, 170, trans->battery.mode,
+                        have_serial ?
+                        (battery_serial == 0xFFFFFFFF ? trans->battery.mode_service :
+                         battery_serial == 0x00000000 ? trans->battery.mode_autoboot :
+                         trans->battery.mode_default) : "-");
+                } else {
+                    // PSP-3000 cannot use Pandora batteries. Display read status
+                    // in place of the inapplicable mode.
+                    text_battery[12] = GUI::Printf(240, 170,
+                        need_serial_read ? "Serial 6C: -" :
+                        serial_status == 0 ? "Serial 6C: OK" : "Serial 6C ERR: %08X",
+                        (u32)serial_status);
+                }
+                text_battery[13] = GUI::Printf(240, 190,
+                    pspSysconBatteryGetTotalElec(&total_elec) < 0 ?
+                    "Total Elec Charge: -" : "Total Elec Charge: %d mA", total_elec);
             }
             
             if (!update) {

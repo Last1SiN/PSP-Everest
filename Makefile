@@ -1,7 +1,12 @@
-SUBDIRS = plugin/kernel plugin/kumdman app
+# Build each PRX dependency before the app; GNU Make stops at first failure.
+.PHONY: all clean
 
 all:
-	@for dir in $(SUBDIRS); do $(MAKE) -C $$dir; done
+	$(MAKE) -C plugin/kernel
+	$(MAKE) -C plugin/kumdman
+	$(MAKE) -C app
 
 clean:
-	@for dir in $(SUBDIRS); do $(MAKE) clean -C $$dir; done
+	$(MAKE) clean -C app
+	$(MAKE) clean -C plugin/kumdman
+	$(MAKE) clean -C plugin/kernel

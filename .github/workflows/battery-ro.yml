@@ -1,0 +1,41 @@
+name: Rev9 Battery RO build
+
+on:
+  push:
+    branches:
+      - feature/battery-readonly-rev9
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/pspdev/pspdev:v20261001
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify read-only serial command 0x6C
+        shell: bash
+        run: |
+          if grep -R -nE 'pspWriteSerial|pspWriteBat|pspReadBatteryWord' app/source plugin/kernel app/include; then
+            echo 'Legacy battery EEPROM read/write function unexpectedly present' >&2
+            exit 1
+          fi
+          if grep -nE '(param|packet)\[0x0C\][[:space:]]*=[[:space:]]*0x7[34]' plugin/kernel/kernel.c; then
+            echo 'Direct EEPROM access unexpectedly present' >&2
+            exit 1
+          fi
+          grep -F 'packet[0x0C] = 0x6C' plugin/kernel/kernel.c
+      - name: Compile EBOOT
+        shell: bash
+        run: |
+          make
+          test -s app/EBOOT.PBP
+      - name: Publish test binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: PSP-Everest-Rev9-Battery-RO-EBOOT
+          path: app/EBOOT.PBP
+          if-no-files-found: error

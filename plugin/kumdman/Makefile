@@ -20,5 +20,5 @@ include $(PSPSDK)/lib/build_prx.mak
 
 all:
 	psp-build-exports -s $(PRX_EXPORTS)
-	mkdir "../../app/data/"; mv kumdman.prx "../../app/data/"
-	mkdir "../../app/drivers/"; mv kumdman.S "../../app/drivers/"
+	mkdir -p "../../app/data/" && mv kumdman.prx "../../app/data/"
+	mkdir -p "../../app/drivers/" && mv kumdman.S "../../app/drivers/"

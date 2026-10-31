@@ -210,90 +210,20 @@ u8 *pspGetMACAddress(u8 *buf) {
     return buf;
 }
 
-static u32 pspWriteBat(u8 addr, u16 data) {
-    int k1 = pspSdkSetK1(0);
-    
-    int res = 0;
-    u8 param[0x60];
-    
-    if (addr > 0x7F)
-        return(0x80000102);
-        
-    param[0x0C] = 0x73;
-    param[0x0D] = 5;
-    param[0x0E] = addr;
-    param[0x0F] = data;
-    param[0x10] = data >> 8;
-    
-    res = sceSysconCmdExec(param, 0);
-    if (res < 0)
-        return res;
-        
-    pspSdkSetK1(k1);
-    return 0;
-}
-
-int pspWriteSerial(u16 *serial) {
-    int err = 0;
-    
-    err = pspWriteBat(0x07, serial[0]);
-    if (!err)
-        err = pspWriteBat(0x09, serial[1]);
-        
-    return err;
-}
-
-static u32 pspReadEEPROM(u8 addr) {
-    u8 param[0x60];
-    
-    if (addr > 0x7F)
-        return 0x80000102;
-        
+// Read-only battery EEPROM access via Syscon.
+int pspReadBatteryWord(u8 addr, u16 *value) {
+    if (value == NULL || addr > 0x7F)
+        return (int)0x80000102;
+    int oldK1 = pspSdkSetK1(0);
+    u8 param[0x60] = {0};
     param[0x0C] = 0x74;
     param[0x0D] = 3;
     param[0x0E] = addr;
-    
-    int res = sceSysconCmdExec(param, 0);
-    if (res < 0)
-        return res;
-        
-    return (param[0x21] << 8) | param[0x20];
-}
-
-static int pspErrCheck(u32 chdata) {
-    if ((chdata & 0x80250000) == 0x80250000) {
-        return -1;
-    }
-    else if (chdata & 0xFFFF0000) {
-        return(chdata & 0xFFFF0000) >> 16;
-    }
-
-    return 0;
-}
-
-int pspReadSerial(u16 *pdata) {
-    int err = 0;
-    u32 data;
-    
-    u32 k1 = pspSdkSetK1(0);
-    
-    data = pspReadEEPROM(0x07);	
-    err = pspErrCheck(data);
-    
-    if (err >= 0) {
-        pdata[0] = (data & 0xFFFF);
-        data = pspReadEEPROM(0x09);
-        err = pspErrCheck(data);
-        if (err >= 0)
-            pdata[1] = (data & 0xFFFF);
-        else
-            err = data;
-    }
-    else
-        err = data;
-        
-    pspSdkSetK1(k1);
-    return err;
+    int result = (int)sceSysconCmdExec(param, 0);
+    if (result >= 0)
+        *value = ((u16)param[0x21] << 8) | param[0x20];
+    pspSdkSetK1(oldK1);
+    return result < 0 ? result : 0;
 }
 
 int pspChkregGetPsCode(ScePsCode *psCode) {

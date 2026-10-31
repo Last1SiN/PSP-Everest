@@ -226,6 +226,35 @@ int pspReadBatteryWord(u8 addr, u16 *value) {
     return result < 0 ? result : 0;
 }
 
+// Battery serial over the regular 0x6C Syscon query, as used by
+// sceSysconBatteryGetSerial(). This is not an EEPROM access.
+int pspReadBatterySerial(u32 *serial) {
+    if (serial == NULL)
+        return (int)0x80000102;
+
+    int oldK1 = pspSdkSetK1(0);
+    u8 packet[0x60] = {0};
+    packet[0x0C] = 0x6C; // PSP_SYSCON_CMD_BATTERY_GET_SERIAL
+    packet[0x0D] = 2;    // command and length, no request data
+
+    int result = (int)sceSysconCmdExec(packet, 0);
+    if (result >= 0) {
+        // SceSysconPacket.rx begins at 0x1C; rx[1] is the length,
+        // rx[3..6] is the four-byte serial in little-endian order.
+        if (packet[0x1D] == 7) {
+            *serial = (u32)packet[0x1F] |
+                      ((u32)packet[0x20] << 8) |
+                      ((u32)packet[0x21] << 16) |
+                      ((u32)packet[0x22] << 24);
+        } else {
+            result = (int)0x80250001; // unexpected response length
+        }
+    }
+
+    pspSdkSetK1(oldK1);
+    return result < 0 ? result : 0;
+}
+
 int pspChkregGetPsCode(ScePsCode *psCode) {
     int k1 = pspSdkSetK1(0);
     int ret = sceChkregGetPsCode(psCode);

@@ -18,14 +18,14 @@ PSP_MAIN_THREAD_ATTR(0);
 
 s32 sceSysconGetBaryonVersion(s32 *baryon);
 s32 sceSysconGetPommelVersion(s32 *pommel);
-s32 sceSyscon_driver_FB148FB6(s32 *polestar); // sceSysconGetPolestarVersion
-u64 sceSysreg_driver_4F46EEDE(void);          // sceSysregGetFuseId
-u32 sceSysreg_driver_8F4F4E96(void);          // sceSysregGetFuseConfig
+s32 sceSysconGetPolestarVersion(s32 *polestar); // sceSysconGetPolestarVersion
+u64 sceSysregGetFuseId(void);          // sceSysregGetFuseId
+u32 sceSysregGetFuseConfig(void);          // sceSysregGetFuseConfig
 int sceSysregKirkBusClockEnable(void);
 int sceSysregAtaBusClockEnable(void);
 u32 sceSysconCmdExec(void *param, int unk);
 int sceSysconBatteryGetElec(int *elec);
-int sceSyscon_driver_4C539345(int *elec);     // sceSysconBatteryGetTotalElec
+int sceSysconBatteryGetTotalElec(int *elec);     // sceSysconBatteryGetTotalElec
 static int (*sceUtilsBufferCopyWithRange)(u8 *outbuff, int outsize, u8 *inbuff, int insize, int cmd);
 s32 sceChkregGetPsCode(ScePsCode *pPsCode);
 s32 sceChkregGetPsFlags(u8 *pPsFlags, s32 index);
@@ -68,21 +68,21 @@ u32 pspGetTachyonVersion(void) {
 
 u32 pspGetPolestarVersion(s32 *polestar) {
     int k1 = pspSdkSetK1(0);
-    u32 err = sceSyscon_driver_FB148FB6(polestar);
+    u32 err = sceSysconGetPolestarVersion(polestar);
     pspSdkSetK1(k1);
     return err;
 }
 
 u64 pspGetFuseId(void) {
     int k1 = pspSdkSetK1(0);
-    u64 err = sceSysreg_driver_4F46EEDE();
+    u64 err = sceSysregGetFuseId();
     pspSdkSetK1(k1);
     return err;
 }
 
 u32 pspGetFuseConfig(void) {
     int k1 = pspSdkSetK1(0);
-    u32 err = sceSysreg_driver_8F4F4E96();
+    u32 err = sceSysregGetFuseConfig();
     pspSdkSetK1(k1);
     return err;
 }
@@ -249,7 +249,7 @@ int pspSysconBatteryGetElec(int *elec) {
 
 int pspSysconBatteryGetTotalElec(int *elec) {
     int k1 = pspSdkSetK1(0);
-    int ret = sceSyscon_driver_4C539345(elec);
+    int ret = sceSysconBatteryGetTotalElec(elec);
     pspSdkSetK1(k1);
     return ret;
 }

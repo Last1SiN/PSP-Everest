@@ -16,11 +16,18 @@ jobs:
       image: ghcr.io/pspdev/pspdev:v20261001
     steps:
       - uses: actions/checkout@v4
-      - name: Verify no battery EEPROM write functions
+      - name: Verify read-only serial command 0x6C
         shell: bash
         run: |
-          if grep -R -nE 'pspWriteSerial|pspWriteBat' app/source plugin/kernel app/include; then exit 1; fi
-          if grep -n 'param\[0x0C\] = 0x73' plugin/kernel/kernel.c; then exit 1; fi
+          if grep -R -nE 'pspWriteSerial|pspWriteBat|pspReadBatteryWord' app/source plugin/kernel app/include; then
+            echo 'Legacy battery EEPROM read/write function unexpectedly present' >&2
+            exit 1
+          fi
+          if grep -nE '(param|packet)\[0x0C\][[:space:]]*=[[:space:]]*0x7[34]' plugin/kernel/kernel.c; then
+            echo 'Direct EEPROM access unexpectedly present' >&2
+            exit 1
+          fi
+          grep -F 'packet[0x0C] = 0x6C' plugin/kernel/kernel.c
       - name: Compile EBOOT
         shell: bash
         run: |
